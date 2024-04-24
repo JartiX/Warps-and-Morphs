@@ -48,9 +48,9 @@ def draw_voronoi(img, subdiv) :
         cv2.polylines(img, ifacets, True, (0, 0, 0), 1, cv2.LINE_AA, 0)
         cv2.circle(img, (int(centers[i][0]), int(centers[i][1])), 3, (0, 0, 0), cv2.FILLED, cv2.LINE_AA, 0)
 
-def get_control_points(face, out):
+def get_control_points(face, out, draw=True):
     detector = FaceMeshDetector(maxFaces=3)
-    _, faces = detector.findFaceMesh(face)
+    _, faces = detector.findFaceMesh(face, draw=draw)
     if faces:
         for i in faces[0]:
             out.append((i[0], i[1]))
@@ -155,6 +155,74 @@ def morphTriangle(img1, img2, img, t1, t2, t, alpha) :
 
     img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] = img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] * ( 1 - mask ) + imgRect * mask
 
+def create_morph(img1, img2, imgMorph, alpha, coords, coords2):
+    for i in range(min(len(coords), len(coords2))):
+        t1 = [(coords[i][0][0], coords[i][0][1]), (coords[i][1][0], coords[i][1][1]), (coords[i][2][0], coords[i][2][1])]
+        t2 = [(coords2[i][0][0], coords2[i][0][1]), (coords2[i][1][0], coords2[i][1][1]), (coords2[i][2][0], coords2[i][2][1])]
+
+        morph_t = []
+        for j in range(3):
+            x = (1 - alpha) * t1[j][0] + alpha * t2[j][0]
+            y = (1 - alpha) * t1[j][1] + alpha * t2[j][1]
+            morph_t.append((x, y))
+
+        morphTriangle(img1, img2, imgMorph, t1, t2, morph_t, alpha)
+
+def create_cords(pts, triangles):
+    coords = []
+    for i in range(0, len(triangles), 3):
+        coords.append([
+            pts[triangles[i]],
+            pts[triangles[i+1]],
+            pts[triangles[i+2]]
+        ])
+    return coords
+
+def screen_normalizator(*images):
+    if isinstance(images[0], list):
+        images = images[0]
+    imgMorph = np.zeros((max(images[0].shape[0], images[1].shape[0]), max(images[1].shape[1],images[1].shape[1]), images[0].shape[2]), dtype=images[0].dtype)
+    max_w, max_h = 0, 0
+    for img in range(len(images)-1):
+        imgMorph = np.zeros((max(images[img].shape[0], images[img+1].shape[0], max_h), max(images[img].shape[1],images[img+1].shape[1], max_w), images[img].shape[2]), dtype=images[img].dtype)
+        if max_h < imgMorph.shape[0]:
+            max_h = imgMorph.shape[0]
+        if max_w < imgMorph.shape[1]:
+            max_w = imgMorph.shape[1]
+
+    return imgMorph
+
+def create_morphs(*paths):
+    window = "Morphs"
+    cv2.namedWindow(window, cv2.WINDOW_GUI_NORMAL)
+
+    images = []
+    for path in paths:
+        images.append(cv2.imread(f'faces/{path}'))
+    alphas = np.linspace(0, 1, 50)
+    imgMorph = screen_normalizator(images)
+
+    points = []
+    for img in images:
+        pts = []
+        get_control_points(img, pts, False)
+        points.append(pts)
+
+    triangles = Delaunator(points[0]).triangles
+    coords = []
+
+    for pts in points:
+        coords.append(create_cords(pts, triangles))
+    
+    for index_img in range(len(images)-1):
+        for alpha in alphas:
+            imgMorph.fill(0)
+            create_morph(images[index_img], images[index_img+1], imgMorph, alpha, coords[index_img], coords[index_img+1])
+
+            cv2.imshow(window, imgMorph)
+            cv2.waitKey(1)
+    cv2.waitKey(0)
+    
 def main(path1, path2, alpha, using_alpha=False, animate=False):
     img1 = cv2.imread(f'faces/{path1}')
     img2 = cv2.imread(f'faces/{path2}')
@@ -168,56 +236,22 @@ def main(path1, path2, alpha, using_alpha=False, animate=False):
     alphas = np.linspace(0, 1, 50)
     image, image_voronoi, pts = create_del_vor(f"{path1}", win_delaunay1, animate)
     image2, image_voronoi2, pts2 = create_del_vor(f"{path2}", win_delaunay2, animate)
-    if (img1.shape[0]*img1.shape[1]) < (img2.shape[0]*img2.shape[1]):
-        temp = np.zeros((max(img1.shape[0], img2.shape[0]), max(img1.shape[1],img2.shape[1]), img1.shape[2]), dtype=img1.dtype)
-        temp[:img1.shape[0], :img1.shape[1]] = img1
-        img1 = temp
-    imgMorph = np.zeros(img1.shape, dtype = img1.dtype)
+
+    imgMorph = screen_normalizator(img1, img2)
 
     triangles = Delaunator(pts).triangles
-    coords = []
-    coords2 = []
-    for i in range(0, len(triangles), 3):
-        coords.append([
-            pts[triangles[i]],
-            pts[triangles[i+1]],
-            pts[triangles[i+2]]
-        ])
-        coords2.append([
-            pts2[triangles[i]],
-            pts2[triangles[i+1]],
-            pts2[triangles[i+2]]
-        ])
+    coords = create_cords(pts, triangles)
+    coords2 = create_cords(pts2, triangles)
 
     if not using_alpha:
         for alpha in alphas:
             imgMorph.fill(0)
-            for i in range(min(len(coords), len(coords2))):
-                t1 = [(coords[i][0][0], coords[i][0][1]), (coords[i][1][0], coords[i][1][1]), (coords[i][2][0], coords[i][2][1])]
-                t2 = [(coords2[i][0][0], coords2[i][0][1]), (coords2[i][1][0], coords2[i][1][1]), (coords2[i][2][0], coords2[i][2][1])]
-
-                morph_t = []
-                for j in range(3):
-                    x = (1 - alpha) * t1[j][0] + alpha * t2[j][0]
-                    y = (1 - alpha) * t1[j][1] + alpha * t2[j][1]
-                    morph_t.append((x, y))
-
-                morphTriangle(img1, img2, imgMorph, t1, t2, morph_t, alpha)
+            create_morph(img1, img2, imgMorph, alpha, coords, coords2)
 
             cv2.imshow(win_morphed, imgMorph)
             cv2.waitKey(1)
     else:
-        for i in range(min(len(coords), len(coords2))):
-            t1 = [(coords[i][0][0], coords[i][0][1]), (coords[i][1][0], coords[i][1][1]), (coords[i][2][0], coords[i][2][1])]
-            t2 = [(coords2[i][0][0], coords2[i][0][1]), (coords2[i][1][0], coords2[i][1][1]), (coords2[i][2][0], coords2[i][2][1])]
-
-            morph_t = []
-            for j in range(3):
-                x = (1 - alpha) * t1[j][0] + alpha * t2[j][0]
-                y = (1 - alpha) * t1[j][1] + alpha * t2[j][1]
-                morph_t.append((x, y))
-
-            morphTriangle(img1, img2, imgMorph, t1, t2, morph_t, alpha)
+        create_morph(img1, img2, imgMorph, alpha, coords, coords2)
 
         cv2.imshow(win_morphed, imgMorph)
         cv2.waitKey(1)
@@ -241,4 +275,12 @@ if __name__ == '__main__':
 
     file_name1 = "good_man.jpg"
     file_name2 = "giga_man.jpg"
-    main(file_name1, file_name2, 0.5,using_alpha=False, animate=animate)
+    file_name3 = "Girl1.jpg"
+    file_name4 = "Girl2.jpg"
+    file_name5 = "girl.jpg"
+    file_name6 = "putin.jpg"
+    file_name7 = "rock.jpeg"
+    file_name8 = "sveta1.jpg"
+    file_name9 = "sveta2.jpg"
+    # main(file_name1, file_name3, 0.5,using_alpha=False, animate=animate)
+    create_morphs(file_name1, file_name2, file_name5, file_name6, file_name7)
