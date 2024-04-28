@@ -91,10 +91,11 @@ def create_subdiv(image):
     subdiv = cv2.Subdiv2D(rect)
     return subdiv
 
-def create_delaunay(image, subdiv, points, anime=False):
+def create_delaunay(image, subdiv, points, animate=False):
     for p in points:
         subdiv.insert(p)
         if animate:
+            cv2.namedWindow("Delaunay", cv2.WINDOW_GUI_NORMAL)
             img_copy = image.copy()
             draw_delaunay(img_copy, subdiv, (255, 255, 255))
             cv2.imshow("Delaunay", img_copy)
@@ -108,7 +109,7 @@ def create_del_vor(path, animate=False):
     subdiv = create_subdiv(img)
 
     points = []
-    get_control_points(img, points)
+    get_control_points(img, points, draw=False)
 
     create_delaunay(img, subdiv, points, animate)
 
