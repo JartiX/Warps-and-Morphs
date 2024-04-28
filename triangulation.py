@@ -85,27 +85,32 @@ def catch_face(img):
     del size
     del rect
 
-def create_del_vor(path, win_d, animate=False):
-    img = cv2.imread(f"faces/{path}")
-
-    img_orig = img.copy()
- 
-    size = img.shape
+def create_subdiv(image):
+    size = image.shape
     rect = (0, 0, size[1], size[0]) 
     subdiv = cv2.Subdiv2D(rect)
+    return subdiv
+
+def create_delaunay(image, subdiv, points, anime=False):
+    for p in points:
+        subdiv.insert(p)
+        if animate:
+            img_copy = image.copy()
+            draw_delaunay(img_copy, subdiv, (255, 255, 255))
+            cv2.imshow("Delaunay", img_copy)
+            cv2.waitKey(100)
+            
+    draw_delaunay( image, subdiv, (255, 255, 255))
+
+def create_del_vor(path, animate=False):
+    img = cv2.imread(f"faces/{path}")
+
+    subdiv = create_subdiv(img)
 
     points = []
     get_control_points(img, points)
- 
-    for p in points :
-        subdiv.insert(p)
- 
-        if animate :
-            img_copy = img_orig.copy()
-            draw_delaunay( img_copy, subdiv, (255, 255, 255))
-            cv2.imshow(win_d, img_copy)
-            cv2.waitKey(100)
-    draw_delaunay( img, subdiv, (255, 255, 255))
+
+    create_delaunay(img, subdiv, points, animate)
 
     for p in points :
         draw_point(img, p, (0,0,255))
@@ -178,34 +183,49 @@ def create_cords(pts, triangles):
         ])
     return coords
 
-def screen_normalizator(*images):
+def screen_normalizator(to_same_resolution, *images):
     if isinstance(images[0], list):
         images = images[0]
-    imgMorph = np.zeros((max(images[0].shape[0], images[1].shape[0]), max(images[1].shape[1],images[1].shape[1]), images[0].shape[2]), dtype=images[0].dtype)
-    max_w, max_h = 0, 0
-    for img in range(len(images)-1):
-        imgMorph = np.zeros((max(images[img].shape[0], images[img+1].shape[0], max_h), max(images[img].shape[1],images[img+1].shape[1], max_w), images[img].shape[2]), dtype=images[img].dtype)
-        if max_h < imgMorph.shape[0]:
-            max_h = imgMorph.shape[0]
-        if max_w < imgMorph.shape[1]:
-            max_w = imgMorph.shape[1]
+    if not to_same_resolution:
+        imgMorph = np.zeros((max(images[0].shape[0], images[1].shape[0]), max(images[0].shape[1],images[1].shape[1]), images[0].shape[2]), dtype=images[0].dtype)
+        max_w, max_h = 0, 0
+        for img in range(len(images)-1):
+            imgMorph = np.zeros((max(images[img].shape[0], images[img+1].shape[0], max_h), max(images[img].shape[1],images[img+1].shape[1], max_w), images[img].shape[2]), dtype=images[img].dtype)
+            if max_h < imgMorph.shape[0]:
+                max_h = imgMorph.shape[0]
+            if max_w < imgMorph.shape[1]:
+                max_w = imgMorph.shape[1]
+    else:
+        imgMorph = np.zeros((min(images[0].shape[0], images[1].shape[0]), min(images[0].shape[1],images[1].shape[1]), images[0].shape[2]), dtype=images[0].dtype)
+        min_w, min_h = 134000, 134000
+        for img in range(len(images)-1):
+            imgMorph = np.zeros((min(images[img].shape[0], images[img+1].shape[0], min_h), min(images[img].shape[1],images[img+1].shape[1], min_w), images[img].shape[2]), dtype=images[img].dtype)
+            if min_h > imgMorph.shape[0]:
+                min_h = imgMorph.shape[0]
+            if min_w < imgMorph.shape[1]:
+                min_w = imgMorph.shape[1]
 
     return imgMorph
 
-def create_morphs(*paths):
+def create_morphs(to_same_resolution, *paths):
     window = "Morphs"
     cv2.namedWindow(window, cv2.WINDOW_GUI_NORMAL)
 
     images = []
     for path in paths:
         images.append(cv2.imread(f'faces/{path}'))
+        
     alphas = np.linspace(0, 1, 50)
-    imgMorph = screen_normalizator(images)
+    imgMorph = screen_normalizator(to_same_resolution, images)
 
     points = []
-    for img in images:
+    for img_index in range(len(images)):
         pts = []
-        get_control_points(img, pts, False)
+
+        if to_same_resolution:
+            images[img_index] = cv2.resize(images[img_index], (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+        
+        get_control_points(images[img_index], pts, False)
         points.append(pts)
 
     triangles = Delaunator(points[0]).triangles
@@ -222,8 +242,10 @@ def create_morphs(*paths):
             cv2.imshow(window, imgMorph)
             cv2.waitKey(1)
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
     
-def main(path1, path2, alpha, using_alpha=False, animate=False):
+def main(path1, path2, alpha, to_same_resolution, using_alpha=False, animate=False):
     img1 = cv2.imread(f'faces/{path1}')
     img2 = cv2.imread(f'faces/{path2}')
     win_delaunay1 = "IMG1 Delaunay Triangulation"
@@ -233,11 +255,20 @@ def main(path1, path2, alpha, using_alpha=False, animate=False):
     win_morphed = "IMG Morphed"
     cv2.namedWindow(win_morphed, cv2.WINDOW_GUI_NORMAL)
 
+    imgMorph = screen_normalizator(to_same_resolution, img1, img2)
+    if to_same_resolution:
+        img1 = cv2.resize(img1, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+        img2 = cv2.resize(img2, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+    
     alphas = np.linspace(0, 1, 50)
-    image, image_voronoi, pts = create_del_vor(f"{path1}", win_delaunay1, animate)
-    image2, image_voronoi2, pts2 = create_del_vor(f"{path2}", win_delaunay2, animate)
+    pts = []
+    get_control_points(img1, pts, False)
+    pts2 = []
+    get_control_points(img2, pts2, False)
 
-    imgMorph = screen_normalizator(img1, img2)
+    image, image_voronoi, _ = create_del_vor(f"{path1}", animate)
+    image2, image_voronoi2, _ = create_del_vor(f"{path2}", animate)
+
 
     triangles = Delaunator(pts).triangles
     coords = create_cords(pts, triangles)
@@ -269,18 +300,41 @@ def main(path1, path2, alpha, using_alpha=False, animate=False):
     cv2.imshow(win_voronoi2, image_voronoi2)
 
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     animate = False
 
     file_name1 = "good_man.jpg"
     file_name2 = "giga_man.jpg"
-    file_name3 = "Girl1.jpg"
-    file_name4 = "Girl2.jpg"
+    file_name3 = "girl1.jpg"
     file_name5 = "girl.jpg"
     file_name6 = "putin.jpg"
-    file_name7 = "rock.jpeg"
-    file_name8 = "sveta1.jpg"
-    file_name9 = "sveta2.jpg"
-    # main(file_name1, file_name3, 0.5,using_alpha=False, animate=animate)
-    create_morphs(file_name1, file_name2, file_name5, file_name6, file_name7)
+    file_name7 = "rock.jpg"
+    file_name11 = "fiona_normal.jpg"
+    file_name12 = "Daniel1.jpg"
+    file_name13 = "Daniel2.jpg"
+    file_name14 = "Daniel3.jpg"
+    file_name15 = "Daniel4.jpg"
+    file_name16 = "Daniel5.jpg"
+
+    file_name8 = "big_rock.jpeg"
+    file_name9 = "big_good_man.jpg"
+    file_name10 = "big_giga_man.jpg"
+    file_name17 = "big_girl1.jpg"
+    file_name18 = "big_girl.jpg"
+    file_name19 = "big_putin.jpg"
+    file_name21 = "big_fiona_normal.jpg"
+    file_name22 = "big_Daniel1.jpg"
+    file_name23 = "big_Daniel2.jpg"
+    file_name24 = "big_Daniel3.jpg"
+    file_name25 = "big_Daniel4.jpg"
+    file_name26 = "big_Daniel5.jpg"
+
+    main(file_name13, file_name17, 0.5, True, using_alpha=False, animate=animate)
+    main(file_name13, file_name17, 0.5, False, using_alpha=False, animate=animate)
+
+    create_morphs(False, file_name13, file_name1, file_name2, file_name15, file_name5, file_name6, file_name7, file_name3, file_name12, file_name11, file_name16, file_name14, file_name2)
+    
+    create_morphs(True, file_name17, file_name8, file_name9, file_name24, file_name19, file_name10, file_name18, file_name25, file_name21, file_name22, file_name23, file_name26)
+    create_morphs(False, file_name17, file_name8, file_name9, file_name24, file_name19, file_name10, file_name18, file_name25, file_name21, file_name22, file_name23, file_name26)
