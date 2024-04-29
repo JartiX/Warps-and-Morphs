@@ -383,25 +383,33 @@ if __name__ == '__main__':
     file_name26 = "big_Daniel5.jpg"
 
     # Визуализация триангуляции Делонэ
-    main(file_name13, file_name17, 0.5, to_same_resolution=True, using_alpha=False, animate=True, replace_face=False)
+    print("Визуализация триангуляции Делонэ")
+    main(file_name15, file_name17, 0.5, to_same_resolution=True, using_alpha=False, animate=True, replace_face=False)
 
     # Трансформация 2 лиц без заданной альфой с приведением к минимальному разрешению
+    print("Трансформация 2 лиц без заданной альфой с приведением к минимальному разрешению")
     main(file_name13, file_name17, 0.5, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=False)
 
     # Трансформация 2 лиц без заданной альфой с приведением к максимальному разрешению
+    print("Трансформация 2 лиц без заданной альфой с приведением к максимальному разрешению")
     main(file_name13, file_name17, 0.5, to_same_resolution=False, using_alpha=False, animate=animate, replace_face=False)
 
-    # Трансформация 2 лиц с заданной альфой
+    # Трансформация 2 лиц с заданной альфой с приведением к минимальному разрешению
+    print("Трансформация 2 лиц с заданной альфой с приведением к минимальному разрешению")
     main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=True, animate=animate, replace_face=False)
 
     # Замена лица на другое без альфы
+    print("Замена лица на другое без альфы")
     main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=True)
 
     # Замена лица на другое с альфой
+    print("Замена лица на другое с альфой")
     main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=True)
 
     # Трансформация множества лиц с приведением к максимальному разрешению
+    print("Трансформация множества лиц с приведением к максимальному разрешению")
     create_morphs(False, file_name13, file_name1, file_name2, file_name15, file_name5, file_name6, file_name7, file_name3, file_name12, file_name11, file_name16, file_name14, file_name2)
     
     # Трансформация множества лиц с приведением к минимальному разрешению
+    print("Трансформация множества лиц с приведением к минимальному разрешению")
     create_morphs(True, file_name17, file_name8, file_name9, file_name24, file_name19, file_name10, file_name18, file_name25, file_name21, file_name22, file_name23, file_name26)
