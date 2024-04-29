@@ -22,7 +22,7 @@ while True:
         break
     success, img = cap.read()
     img = cv2.flip(img, 1)
-    img = face_mask(img, mask, 0.6)
+    img = face_mask(img, mask, 0.5)
     cv2.imshow("Image", img)
     del img
 
