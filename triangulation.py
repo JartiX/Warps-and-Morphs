@@ -249,7 +249,6 @@ def create_morphs(to_same_resolution, *paths):
 
 def face_mask(img1, img2, alpha):
     imgMorph = img1.copy()
-    img1 = cv2.resize(img1, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
     img2 = cv2.resize(img2, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
 
     pts = []
