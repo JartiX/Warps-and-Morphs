@@ -229,8 +229,15 @@ def create_morphs(to_same_resolution, *paths):
         
         get_control_points(images[img_index], pts, False)
         points.append(pts)
+        
+    triangles = []
+    max = -1
+    for pts in range(len(points)):
+        tr = Delaunator(points[pts]).triangles
+        if len(tr) > max:
+            max = len(tr)
+            triangles = tr
 
-    triangles = Delaunator(points[0]).triangles
     coords = []
 
     for pts in points:
