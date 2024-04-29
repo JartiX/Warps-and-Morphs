@@ -48,8 +48,8 @@ def draw_voronoi(img, subdiv) :
         cv2.polylines(img, ifacets, True, (0, 0, 0), 1, cv2.LINE_AA, 0)
         cv2.circle(img, (int(centers[i][0]), int(centers[i][1])), 3, (0, 0, 0), cv2.FILLED, cv2.LINE_AA, 0)
 
-def get_control_points(face, out, draw=True):
-    detector = FaceMeshDetector(maxFaces=3)
+def get_control_points(face, out, draw=True, maxFaces=1):
+    detector = FaceMeshDetector(maxFaces=maxFaces)
     _, faces = detector.findFaceMesh(face, draw=draw)
     if faces:
         for i in faces[0]:
@@ -72,7 +72,7 @@ def catch_face(img):
     rect = (0, 0, size[1], size[0])
     subdiv = cv2.Subdiv2D(rect)
     points = []
-    get_control_points(img, points)
+    get_control_points(img, points, maxFaces=3)
     for p in points :
         if not check_in_screen(p, size):
             continue
@@ -80,7 +80,6 @@ def catch_face(img):
     draw_delaunay( img, subdiv, (255, 255, 255))
     for p in points :
         draw_point(img, p, (0,0,255))
-    del points
     del subdiv
     del size
     del rect
@@ -161,7 +160,7 @@ def morphTriangle(img1, img2, img, t1, t2, t, alpha) :
 
     img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] = img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] * ( 1 - mask ) + imgRect * mask
 
-def create_morph(img1, img2, imgMorph, alpha, coords, coords2):
+def create_morph(img1, img2, imgMorph, alpha, coords, coords2, replace_face=False):
     for i in range(min(len(coords), len(coords2))):
         t1 = [(coords[i][0][0], coords[i][0][1]), (coords[i][1][0], coords[i][1][1]), (coords[i][2][0], coords[i][2][1])]
         t2 = [(coords2[i][0][0], coords2[i][0][1]), (coords2[i][1][0], coords2[i][1][1]), (coords2[i][2][0], coords2[i][2][1])]
@@ -171,8 +170,10 @@ def create_morph(img1, img2, imgMorph, alpha, coords, coords2):
             x = (1 - alpha) * t1[j][0] + alpha * t2[j][0]
             y = (1 - alpha) * t1[j][1] + alpha * t2[j][1]
             morph_t.append((x, y))
-
-        morphTriangle(img1, img2, imgMorph, t1, t2, morph_t, alpha)
+        if replace_face:
+            morphTriangle(img1, img2, imgMorph, t1, t2, t1, alpha)
+        else:
+            morphTriangle(img1, img2, imgMorph, t1, t2, morph_t, alpha)
 
 def create_cords(pts, triangles):
     coords = []
@@ -245,8 +246,43 @@ def create_morphs(to_same_resolution, *paths):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+
+def face_mask(img1, img2, alpha):
+    imgMorph = img1.copy()
+    img1 = cv2.resize(img1, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+    img2 = cv2.resize(img2, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+
+    pts = []
+    get_control_points(img1, pts, False)
+
+    if len(pts) == 0:
+        return img1
     
-def main(path1, path2, alpha, to_same_resolution, using_alpha=False, animate=False):
+    size = img1.shape
+    for p in pts :
+        if not check_in_screen(p, size):
+            return img1
+        
+    pts2 = []
+    get_control_points(img2, pts2, False)
+    if len(pts2) == 0:
+        return img1
+    
+    triangles1 = Delaunator(pts).triangles
+    triangles2 = Delaunator(pts2).triangles
+    triangles = triangles1 if len(triangles1) <= len(triangles2) else triangles2
+
+    coords = create_cords(pts, triangles)
+    coords2 = create_cords(pts2, triangles)
+
+    create_morph(img1, img2, imgMorph, alpha, coords, coords2, True)
+
+    del coords
+    del coords2
+
+    return imgMorph
+
+def main(path1, path2, alpha, to_same_resolution, using_alpha=False, animate=False, replace_face=False):
     img1 = cv2.imread(f'faces/{path1}')
     img2 = cv2.imread(f'faces/{path2}')
     win_delaunay1 = "IMG1 Delaunay Triangulation"
@@ -255,11 +291,13 @@ def main(path1, path2, alpha, to_same_resolution, using_alpha=False, animate=Fal
     win_voronoi2 = "IMG2 Voronoi Diagram"
     win_morphed = "IMG Morphed"
     cv2.namedWindow(win_morphed, cv2.WINDOW_GUI_NORMAL)
-
-    imgMorph = screen_normalizator(to_same_resolution, img1, img2)
-    if to_same_resolution:
-        img1 = cv2.resize(img1, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
-        img2 = cv2.resize(img2, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+    if replace_face:
+        imgMorph = img1.copy()
+    else:
+        imgMorph = screen_normalizator(to_same_resolution, img1, img2)
+        if to_same_resolution:
+            img1 = cv2.resize(img1, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
+            img2 = cv2.resize(img2, (imgMorph.shape[1], imgMorph.shape[0]), interpolation=cv2.INTER_AREA)
     
     alphas = np.linspace(0, 1, 50)
     pts = []
@@ -271,19 +309,23 @@ def main(path1, path2, alpha, to_same_resolution, using_alpha=False, animate=Fal
     image2, image_voronoi2, _ = create_del_vor(f"{path2}", animate)
 
 
-    triangles = Delaunator(pts).triangles
+    triangles1 = Delaunator(pts).triangles
+    triangles2 = Delaunator(pts2).triangles
+    triangles = triangles1 if len(triangles1) <= len(triangles2) else triangles2
+
     coords = create_cords(pts, triangles)
     coords2 = create_cords(pts2, triangles)
 
     if not using_alpha:
         for alpha in alphas:
-            imgMorph.fill(0)
-            create_morph(img1, img2, imgMorph, alpha, coords, coords2)
+            if not replace_face:
+                imgMorph.fill(0)
+            create_morph(img1, img2, imgMorph, alpha, coords, coords2, replace_face=replace_face)
 
             cv2.imshow(win_morphed, imgMorph)
             cv2.waitKey(1)
     else:
-        create_morph(img1, img2, imgMorph, alpha, coords, coords2)
+        create_morph(img1, img2, imgMorph, alpha, coords, coords2, replace_face=replace_face)
 
         cv2.imshow(win_morphed, imgMorph)
         cv2.waitKey(1)
@@ -332,10 +374,26 @@ if __name__ == '__main__':
     file_name25 = "big_Daniel4.jpg"
     file_name26 = "big_Daniel5.jpg"
 
-    main(file_name13, file_name17, 0.5, True, using_alpha=False, animate=animate)
-    main(file_name13, file_name17, 0.5, False, using_alpha=False, animate=animate)
+    # Визуализация триангуляции Делонэ
+    main(file_name13, file_name17, 0.5, to_same_resolution=True, using_alpha=False, animate=True, replace_face=False)
 
+    # Трансформация 2 лиц без заданной альфой с приведением к минимальному разрешению
+    main(file_name13, file_name17, 0.5, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=False)
+
+    # Трансформация 2 лиц без заданной альфой с приведением к максимальному разрешению
+    main(file_name13, file_name17, 0.5, to_same_resolution=False, using_alpha=False, animate=animate, replace_face=False)
+
+    # Трансформация 2 лиц с заданной альфой
+    main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=True, animate=animate, replace_face=False)
+
+    # Замена лица на другое без альфы
+    main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=True)
+
+    # Замена лица на другое с альфой
+    main(file_name13, file_name2, 0.6, to_same_resolution=True, using_alpha=False, animate=animate, replace_face=True)
+
+    # Трансформация множества лиц с приведением к максимальному разрешению
     create_morphs(False, file_name13, file_name1, file_name2, file_name15, file_name5, file_name6, file_name7, file_name3, file_name12, file_name11, file_name16, file_name14, file_name2)
     
+    # Трансформация множества лиц с приведением к минимальному разрешению
     create_morphs(True, file_name17, file_name8, file_name9, file_name24, file_name19, file_name10, file_name18, file_name25, file_name21, file_name22, file_name23, file_name26)
-    create_morphs(False, file_name17, file_name8, file_name9, file_name24, file_name19, file_name10, file_name18, file_name25, file_name21, file_name22, file_name23, file_name26)
