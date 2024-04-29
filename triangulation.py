@@ -257,17 +257,19 @@ def face_mask(img1, img2, alpha):
 
     if len(pts) == 0:
         return img1
-    
-    size = img1.shape
-    for p in pts :
-        if not check_in_screen(p, size):
-            return img1
-        
+            
     pts2 = []
     get_control_points(img2, pts2, False)
     if len(pts2) == 0:
         return img1
     
+    removed = 0
+    for p in range(len(pts)) :
+        if not check_in_screen(pts[p-removed], img1.shape):
+            pts.remove(pts[p-removed])
+            pts2.remove(pts2[p-removed])
+            removed += 1
+
     triangles1 = Delaunator(pts).triangles
     triangles2 = Delaunator(pts2).triangles
     triangles = triangles1 if len(triangles1) <= len(triangles2) else triangles2
